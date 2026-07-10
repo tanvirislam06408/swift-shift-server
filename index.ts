@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { MongoClient, ServerApiVersion } from "mongodb";
+import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 
 dotenv.config();
 
@@ -41,6 +41,21 @@ async function run() {
 
     app.get("/products", async (req: Request, res: Response) => {
       const result = await productsCollection.find().toArray();
+      res.send(result);
+    });
+    app.get("/products/:id", async (req: Request, res: Response) => {
+      const id = req.params?.id
+      const query = {
+        _id: new ObjectId(id)
+      }
+
+      const result = await productsCollection.findOne()
+      res.send(result);
+    });
+
+
+    app.get("/products-featured", async (req: Request, res: Response) => {
+      const result = await productsCollection.find().limit(4).toArray();
       res.send(result);
     });
 
