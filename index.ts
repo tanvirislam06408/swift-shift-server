@@ -49,7 +49,7 @@ async function run() {
         _id: new ObjectId(id)
       }
 
-      const result = await productsCollection.findOne()
+      const result = await productsCollection.findOne(query)
       res.send(result);
     });
 
