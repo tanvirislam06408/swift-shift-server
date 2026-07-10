@@ -43,7 +43,7 @@ async function run() {
       const result = await productsCollection.find().toArray();
       res.send(result);
     });
-    app.get("/products/:id", async (req: Request, res: Response) => {
+    app.get("/products/:id", async (req: Request<{id: string}>, res: Response) => {
       const id = req.params?.id
       const query = {
         _id: new ObjectId(id)
