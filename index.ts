@@ -39,35 +39,6 @@ async function run() {
       res.send("🚀 Swift Shift Server is running...");
     });
 
-//    app.get("/products", async (req: Request, res: Response) => {
-//   try {
-//     const page = Number(req.query.page) || 1;
-//     const limit = Number(req.query.limit) || 8;
-
-//     const skip = (page - 1) * limit;
-
-//     const products = await productsCollection
-//       .find()
-//       .skip(skip)
-//       .limit(limit)
-//       .toArray();
-
-//     const totalProducts = await productsCollection.countDocuments();
-//     console.log(page);
-    
-//     res.send({
-//       products,
-//       totalProducts,
-//       currentPage: page,
-//       totalPages: Math.ceil(totalProducts / limit),
-//     });
-//   } catch (error) {
-//     res.status(500).send({
-//       message: "Failed to fetch products",
-//       error,
-//     });
-//   }
-// });
 
 
 
@@ -178,7 +149,7 @@ app.get("/products", async (req: Request, res: Response) => {
     });
 
     // Ping database
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("✅ MongoDB Ping Successful");
   } catch (error) {
     console.error(error);
