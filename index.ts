@@ -39,10 +39,122 @@ async function run() {
       res.send("🚀 Swift Shift Server is running...");
     });
 
-    app.get("/products", async (req: Request, res: Response) => {
-      const result = await productsCollection.find().toArray();
-      res.send(result);
+//    app.get("/products", async (req: Request, res: Response) => {
+//   try {
+//     const page = Number(req.query.page) || 1;
+//     const limit = Number(req.query.limit) || 8;
+
+//     const skip = (page - 1) * limit;
+
+//     const products = await productsCollection
+//       .find()
+//       .skip(skip)
+//       .limit(limit)
+//       .toArray();
+
+//     const totalProducts = await productsCollection.countDocuments();
+//     console.log(page);
+    
+//     res.send({
+//       products,
+//       totalProducts,
+//       currentPage: page,
+//       totalPages: Math.ceil(totalProducts / limit),
+//     });
+//   } catch (error) {
+//     res.status(500).send({
+//       message: "Failed to fetch products",
+//       error,
+//     });
+//   }
+// });
+
+
+
+app.get("/products", async (req: Request, res: Response) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 8;
+
+    const search = req.query.search?.toString() || "";
+    const category = req.query.category?.toString() || "";
+    const sort = req.query.sort?.toString() || "";
+
+    const skip = (page - 1) * limit;
+
+    // Filter
+    const query: any = {};
+
+    // Search by title
+    if (search) {
+      query.title = {
+        $regex: search,
+        $options: "i",
+      };
+    }
+
+    // Category
+    if (category && category !== "All") {
+      query.category = category;
+    }
+
+    // Sort
+    let sortQuery: any = {};
+
+    switch (sort) {
+      case "price_asc":
+        sortQuery = { price: 1 };
+        break;
+
+      case "price_desc":
+        sortQuery = { price: -1 };
+        break;
+
+      case "rating":
+        sortQuery = { rating: -1 };
+        break;
+
+      case "newest":
+        sortQuery = { availableDate: -1 };
+        break;
+
+      case "title_asc":
+        sortQuery = { title: 1 };
+        break;
+
+      case "title_desc":
+        sortQuery = { title: -1 };
+        break;
+
+      default:
+        sortQuery = {};
+    }
+
+    const products = await productsCollection
+      .find(query)
+      .sort(sortQuery)
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    const totalProducts = await productsCollection.countDocuments(query);
+
+    res.send({
+      products,
+      totalProducts,
+      currentPage: page,
+      totalPages: Math.ceil(totalProducts / limit),
     });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).send({
+      message: "Failed to fetch products",
+    });
+  }
+});
+
+
     app.get("/products/:id", async (req: Request<{id: string}>, res: Response) => {
       const id = req.params?.id
       const query = {
