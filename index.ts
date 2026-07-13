@@ -42,91 +42,91 @@ async function run() {
 
 
 
-app.get("/products", async (req: Request, res: Response) => {
-  try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 8;
+    app.get("/products", async (req: Request, res: Response) => {
+      try {
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 8;
 
-    const search = req.query.search?.toString() || "";
-    const category = req.query.category?.toString() || "";
-    const sort = req.query.sort?.toString() || "";
+        const search = req.query.search?.toString() || "";
+        const category = req.query.category?.toString() || "";
+        const sort = req.query.sort?.toString() || "";
 
-    const skip = (page - 1) * limit;
+        const skip = (page - 1) * limit;
 
-    // Filter
-    const query: any = {};
+        // Filter
+        const query: any = {};
 
-    // Search by title
-    if (search) {
-      query.title = {
-        $regex: search,
-        $options: "i",
-      };
-    }
+        // Search by title
+        if (search) {
+          query.title = {
+            $regex: search,
+            $options: "i",
+          };
+        }
 
-    // Category
-    if (category && category !== "All") {
-      query.category = category;
-    }
+        // Category
+        if (category && category !== "All") {
+          query.category = category;
+        }
 
-    // Sort
-    let sortQuery: any = {};
+        // Sort
+        let sortQuery: any = {};
 
-    switch (sort) {
-      case "price_asc":
-        sortQuery = { price: 1 };
-        break;
+        switch (sort) {
+          case "price_asc":
+            sortQuery = { price: 1 };
+            break;
 
-      case "price_desc":
-        sortQuery = { price: -1 };
-        break;
+          case "price_desc":
+            sortQuery = { price: -1 };
+            break;
 
-      case "rating":
-        sortQuery = { rating: -1 };
-        break;
+          case "rating":
+            sortQuery = { rating: -1 };
+            break;
 
-      case "newest":
-        sortQuery = { availableDate: -1 };
-        break;
+          case "newest":
+            sortQuery = { availableDate: -1 };
+            break;
 
-      case "title_asc":
-        sortQuery = { title: 1 };
-        break;
+          case "title_asc":
+            sortQuery = { title: 1 };
+            break;
 
-      case "title_desc":
-        sortQuery = { title: -1 };
-        break;
+          case "title_desc":
+            sortQuery = { title: -1 };
+            break;
 
-      default:
-        sortQuery = {};
-    }
+          default:
+            sortQuery = {};
+        }
 
-    const products = await productsCollection
-      .find(query)
-      .sort(sortQuery)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
+        const products = await productsCollection
+          .find(query)
+          .sort(sortQuery)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
 
-    const totalProducts = await productsCollection.countDocuments(query);
+        const totalProducts = await productsCollection.countDocuments(query);
 
-    res.send({
-      products,
-      totalProducts,
-      currentPage: page,
-      totalPages: Math.ceil(totalProducts / limit),
+        res.send({
+          products,
+          totalProducts,
+          currentPage: page,
+          totalPages: Math.ceil(totalProducts / limit),
+        });
+      } catch (error) {
+        console.log(error);
+
+        res.status(500).send({
+          message: "Failed to fetch products",
+        });
+      }
     });
-  } catch (error) {
-    console.log(error);
-
-    res.status(500).send({
-      message: "Failed to fetch products",
-    });
-  }
-});
 
 
-    app.get("/products/:id", async (req: Request<{id: string}>, res: Response) => {
+    app.get("/products/:id", async (req: Request<{ id: string }>, res: Response) => {
       const id = req.params?.id
       const query = {
         _id: new ObjectId(id)
@@ -135,6 +135,39 @@ app.get("/products", async (req: Request, res: Response) => {
       const result = await productsCollection.findOne(query)
       res.send(result);
     });
+
+
+
+    // get product by category
+    app.get('/product/:category', async (req: Request<{ category: string }>, res: Response) => {
+      const category = req.params.category;
+      const query: any = {};
+
+
+      if (category && category !== "All") {
+        query.category = category;
+      }
+      console.log(category);
+
+      try {
+        const products = await productsCollection.find(query).toArray();
+
+        console.log(products);
+
+        res.send(products);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: 'Failed to fetch products by category' });
+      }
+    })
+
+
+    // product add to cart
+    app.post('/add-to-cart', async(req: Request, res: Response) => {
+      const data=req.body;
+      console.log(data);
+      
+    })
 
 
     app.get("/products-featured", async (req: Request, res: Response) => {
@@ -156,8 +189,12 @@ app.get("/products", async (req: Request, res: Response) => {
   }
 }
 
-run();
+void run();
 
-app.listen(port, () => {
-  console.log(`🚀 Server running at http://localhost:${port}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`🚀 Server running at http://localhost:${port}`);
+  });
+}
+
+export default app;
