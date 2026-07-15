@@ -2,6 +2,8 @@ import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
+import { createRemoteJWKSet, jwtVerify } from "jose-cjs";
+
 
 dotenv.config();
 
@@ -22,6 +24,49 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+
+const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_CLIENT_SITE}/api/auth/jwks`))
+
+const verifyToken = async (req: Request, res: Response, next) => {
+  const authHeader = req.headers?.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer")) {
+    return res.status(401).send({ message: 'unauthorize' })
+  }
+  const token = authHeader.split(" ")[1]
+
+  if (!token) {
+    return res.status(401).send({ message: 'unauthorize' })
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload
+    next()
+
+  }
+  catch (err) {
+
+    res.status(401).send({ message: 'unauthorize' })
+  }
+
+
+
+}
+
+
+// verify admin
+const verifyAdmin = async (req: Request, res: Response, next) => {
+
+
+  if (!req?.user.role === 'admin') {
+    return res.status(403).send({ message: 'Forbidden' })
+  }
+
+  next();
+}
+
 
 async function run() {
   try {
@@ -166,7 +211,7 @@ async function run() {
 
 
     // product add to cart
-    app.post('/add-to-cart', async (req: Request, res: Response) => {
+    app.post('/add-to-cart',verifyToken, async (req: Request, res: Response) => {
       const data = req.body;
       const isExist = {
         userId: data.userId,
@@ -192,7 +237,7 @@ async function run() {
     })
 
     // get cartData 
-    app.get('/api/cartData/:userId', async (req: Request, res: Response) => {
+    app.get('/api/cartData/:userId',verifyToken, async (req: Request, res: Response) => {
       const userId = req.params.userId
       const query = {
         userId: userId
@@ -235,7 +280,7 @@ async function run() {
     })
 
     // add product
-    app.post('/add-products', async (req: Request, res: Response) => {
+    app.post('/add-products',verifyToken,verifyAdmin, async (req: Request, res: Response) => {
       const data = req.body
       const result = await productsCollection.insertOne(data);
       res.send(result)
@@ -245,7 +290,7 @@ async function run() {
 
 
     // delete product
-    app.delete('/delete-products/:id', async (req: Request, res: Response) => {
+    app.delete('/delete-products/:id',verifyToken,verifyAdmin, async (req: Request, res: Response) => {
       const { id } = req.params
       const query = {
         _id: new ObjectId(id)
@@ -260,7 +305,7 @@ async function run() {
 
     //  getallUsers
 
-    app.get('/get-users', async (req: Request, res: Response) => {
+    app.get('/get-users',verifyToken,verifyAdmin, async (req: Request, res: Response) => {
       const result = await userColl.find().toArray();
       res.send(result);
 
@@ -271,7 +316,7 @@ async function run() {
 
 
     app.get(
-      "/get-user-data/:userId",
+      "/get-user-data/:userId", verifyToken,
       async (req: Request<{ userId: string }>, res: Response) => {
         try {
           const { userId } = req.params;
@@ -308,7 +353,7 @@ async function run() {
 
 
     // admin dashboard infos
-    app.get("/get-admin-infos", async (req: Request, res: Response) => {
+    app.get("/get-admin-infos", verifyToken, verifyAdmin, async (req: Request, res: Response) => {
       try {
         const users = await userColl.countDocuments();
         const orders = await ordersCollection.countDocuments();
@@ -354,7 +399,7 @@ async function run() {
 
 
     // delete users
-    app.delete("/packages/:id", async (req: Request, res: Response) => {
+    app.delete("/packages/:id",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
       const id = req.params.id
       const query = {
         _id: new ObjectId(id)
@@ -366,7 +411,7 @@ async function run() {
 
 
     // block unblock user
-    app.patch("/update-status/:status/:id", async (req: Request, res: Response) => {
+    app.patch("/update-status/:status/:id",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
       const status = req.params.status;
       const id = req.params;
       console.log("user id ", id);
