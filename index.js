@@ -47,7 +47,7 @@ const verifyAdmin = async (req, res, next) => {
 async function run() {
     try {
         // Connect MongoDB
-        await client.connect();
+        // await client.connect();
         console.log("✅ Connected to MongoDB");
         const db = client.db(process.env.DB_NAME);
         const productsCollection = db.collection("products");
