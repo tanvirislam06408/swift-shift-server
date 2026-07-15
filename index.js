@@ -2,6 +2,7 @@ import express, {} from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
+import { createRemoteJWKSet, jwtVerify } from "jose-cjs";
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
@@ -17,13 +18,42 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     },
 });
+const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_CLIENT_SITE}/api/auth/jwks`));
+const verifyToken = async (req, res, next) => {
+    const authHeader = req.headers?.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer")) {
+        return res.status(401).send({ message: 'unauthorize' });
+    }
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+        return res.status(401).send({ message: 'unauthorize' });
+    }
+    try {
+        const { payload } = await jwtVerify(token, JWKS);
+        req.user = payload;
+        next();
+    }
+    catch (err) {
+        res.status(401).send({ message: 'unauthorize' });
+    }
+};
+// verify admin
+const verifyAdmin = async (req, res, next) => {
+    if (req?.user?.role !== 'admin') {
+        return res.status(403).send({ message: 'Forbidden' });
+    }
+    next();
+};
 async function run() {
     try {
         // Connect MongoDB
-        // await client.connect();
+        await client.connect();
         console.log("✅ Connected to MongoDB");
         const db = client.db(process.env.DB_NAME);
         const productsCollection = db.collection("products");
+        const cartCollection = db.collection("cart");
+        const ordersCollection = db.collection("orders");
+        const userColl = db.collection("user");
         // Routes
         app.get("/", (req, res) => {
             res.send("🚀 Swift Shift Server is running...");
@@ -102,6 +132,152 @@ async function run() {
             const result = await productsCollection.findOne(query);
             res.send(result);
         });
+        // get product by category
+        app.get('/product/:category', async (req, res) => {
+            const category = req.params.category;
+            const query = {};
+            if (category && category !== "All") {
+                query.category = category;
+            }
+            console.log(category);
+            try {
+                const products = await productsCollection.find(query).toArray();
+                console.log(products);
+                res.send(products);
+            }
+            catch (error) {
+                console.error(error);
+                res.status(500).send({ message: 'Failed to fetch products by category' });
+            }
+        });
+        // product add to cart
+        app.post('/add-to-cart', verifyToken, async (req, res) => {
+            const data = req.body;
+            const isExist = {
+                userId: data.userId,
+                productId: data.productId
+            };
+            console.log(isExist);
+            const exist = await cartCollection.findOne(isExist);
+            if (exist) {
+                return res.status(409).send({
+                    success: false,
+                    message: "Product already exists in cart",
+                    isExist: true,
+                });
+            }
+            const result = await cartCollection.insertOne(data);
+            console.log(result);
+            res.send(result);
+        });
+        // get cartData 
+        app.get('/api/cartData/:userId', verifyToken, async (req, res) => {
+            const userId = req.params.userId;
+            const query = {
+                userId: userId
+            };
+            const result = await cartCollection.find(query).toArray();
+            res.send(result);
+        });
+        // orders and delete from cart
+        app.post('/api/orders', async (req, res) => {
+            const data = req.body;
+            const user = data.customerDetails.userId;
+            console.log(user);
+            const query = {
+                userId: user
+            };
+            const deleteFormCart = await cartCollection.deleteMany(query);
+            console.log(query);
+            const result = await ordersCollection.insertOne(data);
+            res.send(result);
+        });
+        app.delete('/cart/delete', async (req, res) => {
+            const { id } = req.body;
+            const query = {
+                _id: new ObjectId(id)
+            };
+            const result = await cartCollection.deleteOne(query);
+            res.send(result);
+        });
+        // add product
+        app.post('/add-products', verifyToken, verifyAdmin, async (req, res) => {
+            const data = req.body;
+            const result = await productsCollection.insertOne(data);
+            res.send(result);
+        });
+        // delete product
+        app.delete('/delete-products/:id', verifyToken, verifyAdmin, async (req, res) => {
+            const { id } = req.params;
+            const query = {
+                _id: new ObjectId(id)
+            };
+            const result = await productsCollection.deleteOne(query);
+            res.send(result);
+        });
+        //  getallUsers
+        app.get('/get-users', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await userColl.find().toArray();
+            res.send(result);
+        });
+        // user dashboard infos
+        app.get("/get-user-data/:userId", verifyToken, async (req, res) => {
+            try {
+                const { userId } = req.params;
+                const orders = await ordersCollection
+                    .find({
+                    "customerDetails.userId": userId,
+                })
+                    .toArray();
+                const cartItems = await cartCollection
+                    .find({ userId })
+                    .toArray();
+                const totalSpent = orders.reduce((sum, order) => {
+                    return sum + order.pricingSummary.totalPaid;
+                }, 0);
+                res.send({
+                    totalOrders: orders.length,
+                    totalCartItems: cartItems.length,
+                    totalSpent,
+                });
+            }
+            catch (error) {
+                console.error(error);
+                res.status(500).send({
+                    message: "Failed to fetch dashboard data",
+                });
+            }
+        });
+        // admin dashboard infos
+        app.get("/get-admin-infos", verifyToken, verifyAdmin, async (req, res) => {
+            try {
+                const users = await userColl.countDocuments();
+                const orders = await ordersCollection.countDocuments();
+                const activeProducts = await productsCollection.countDocuments();
+                const [earningData] = await ordersCollection.aggregate([
+                    {
+                        $group: {
+                            _id: null,
+                            totalEarning: {
+                                $sum: "$pricingSummary.totalPaid",
+                            },
+                        },
+                    },
+                ]).toArray();
+                res.send({
+                    users,
+                    orders,
+                    activeProducts,
+                    totalEarning: earningData?.totalEarning || 0,
+                });
+            }
+            catch (error) {
+                console.error(error);
+                res.status(500).send({
+                    message: "Failed to fetch admin dashboard data",
+                });
+            }
+        });
         app.get("/products-featured", async (req, res) => {
             const result = await productsCollection.find().limit(4).toArray();
             res.send(result);
@@ -109,6 +285,31 @@ async function run() {
         app.post("/packages", async (req, res) => {
             const data = req.body;
             const result = await productsCollection.insertOne(data);
+            res.send(result);
+        });
+        // delete users
+        app.delete("/packages/:id", verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const query = {
+                _id: new ObjectId(id)
+            };
+            const result = await userColl.deleteOne(query);
+            res.send(result);
+        });
+        // block unblock user
+        app.patch("/update-status/:status/:id", verifyToken, verifyAdmin, async (req, res) => {
+            const status = req.params.status;
+            const id = req.params.id;
+            console.log("user id ", id);
+            const query = {
+                _id: new ObjectId(id)
+            };
+            const updatedDoc = {
+                $set: {
+                    status: status
+                }
+            };
+            const result = await userColl.updateOne(query, updatedDoc);
             res.send(result);
         });
         // Ping database
@@ -119,8 +320,11 @@ async function run() {
         console.error(error);
     }
 }
-run();
-app.listen(port, () => {
-    console.log(`🚀 Server running at http://localhost:${port}`);
-});
+void run();
+if (!process.env.VERCEL) {
+    app.listen(port, () => {
+        console.log(`🚀 Server running at http://localhost:${port}`);
+    });
+}
+export default app;
 //# sourceMappingURL=index.js.map

@@ -1,8 +1,16 @@
-import express, { type Request, type Response } from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import { createRemoteJWKSet, jwtVerify } from "jose-cjs";
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: Record<string, unknown>;
+    }
+  }
+}
 
 
 dotenv.config();
@@ -28,7 +36,7 @@ const client = new MongoClient(uri, {
 
 const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_CLIENT_SITE}/api/auth/jwks`))
 
-const verifyToken = async (req: Request, res: Response, next) => {
+const verifyToken = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers?.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer")) {
@@ -57,10 +65,10 @@ const verifyToken = async (req: Request, res: Response, next) => {
 
 
 // verify admin
-const verifyAdmin = async (req: Request, res: Response, next) => {
+const verifyAdmin = async (req: Request, res: Response, next: NextFunction) => {
 
 
-  if (!req?.user.role === 'admin') {
+  if (req?.user?.role !== 'admin') {
     return res.status(403).send({ message: 'Forbidden' })
   }
 
@@ -270,7 +278,7 @@ async function run() {
     })
 
     app.delete('/cart/delete', async (req: Request, res: Response) => {
-      const { id } = req.body
+      const { id } = req.body as { id: string };
       const query = {
         _id: new ObjectId(id)
       }
@@ -291,7 +299,7 @@ async function run() {
 
     // delete product
     app.delete('/delete-products/:id',verifyToken,verifyAdmin, async (req: Request, res: Response) => {
-      const { id } = req.params
+      const { id } = req.params as { id: string };
       const query = {
         _id: new ObjectId(id)
       }
@@ -400,7 +408,7 @@ async function run() {
 
     // delete users
     app.delete("/packages/:id",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
-      const id = req.params.id
+      const id = req.params.id as string;
       const query = {
         _id: new ObjectId(id)
       }
@@ -413,7 +421,7 @@ async function run() {
     // block unblock user
     app.patch("/update-status/:status/:id",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
       const status = req.params.status;
-      const id = req.params;
+      const id = req.params.id as string;
       console.log("user id ", id);
 
       const query = {
