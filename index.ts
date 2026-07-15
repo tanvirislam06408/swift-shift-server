@@ -79,7 +79,7 @@ const verifyAdmin = async (req: Request, res: Response, next: NextFunction) => {
 async function run() {
   try {
     // Connect MongoDB
-    await client.connect();
+    // await client.connect();
 
     console.log("✅ Connected to MongoDB");
 
